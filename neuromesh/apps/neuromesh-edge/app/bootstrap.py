@@ -10,6 +10,12 @@ from packages.contracts.commands import Command
 from app.config import config
 from app.events.bus import EventBus
 from app.modules.bridge.persistence import PersistenceWriter
+from app.modules.motion.actuator_service import ActuatorService
+from app.modules.motion.calibration import load_or_default
+from app.modules.motion.hardware.adapters import NoOpServoAdapter, PCA9685ServoAdapter
+from app.modules.motion.providers.real_servo import RealServoMotionProvider
+from app.modules.motion.providers.stub import StubMotionProvider
+from app.modules.perception.service import PerceptionService
 from app.modules.state.store import RuntimeState
 from app.observability.logger import build_logger
 from app.observability.metrics import RuntimeMetrics
@@ -23,14 +29,31 @@ class AppContext:
     logger: object
     metrics: RuntimeMetrics
     persistence: PersistenceWriter
+    perception_service: PerceptionService
+    actuator_service: ActuatorService
 
 
 def build_context() -> AppContext:
     random.seed()
     logger = build_logger()
     metrics = RuntimeMetrics()
-    state = RuntimeState(node_id=config.node_id, start_time=monotonic())
+    calibration, calibration_loaded = load_or_default(config.actuators_config_path(), servo_enabled=config.servo.enabled)
+    state = RuntimeState(node_id=config.node_id, start_time=monotonic(), calibration=calibration)
     state.status = "running"
+    state.motion_runtime["calibration_loaded"] = calibration_loaded
+
+    if config.servo.enabled and config.servo.provider == "pca9685":
+        adapter = PCA9685ServoAdapter(
+            i2c_bus=config.servo.i2c_bus,
+            i2c_address=int(config.servo.i2c_address, 16),
+            pwm_frequency=config.servo.pwm_frequency,
+        )
+        motion_provider = RealServoMotionProvider(adapter)
+    else:
+        motion_provider = StubMotionProvider()
+
+    actuator_service = ActuatorService(provider=motion_provider, calibration=calibration)
+    perception_service = PerceptionService.build(config.camera, logger)
 
     def _on_subscribers_changed(total: int) -> None:
         metrics.active_ws_subscribers = total
@@ -49,4 +72,6 @@ def build_context() -> AppContext:
         logger=logger,
         metrics=metrics,
         persistence=persistence,
+        perception_service=perception_service,
+        actuator_service=actuator_service,
     )

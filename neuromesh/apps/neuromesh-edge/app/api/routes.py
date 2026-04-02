@@ -2,8 +2,6 @@ from fastapi import APIRouter
 
 from packages.contracts.commands import Command, CommandAck
 
-from app.modules.motion.actuator_service import evaluate_command
-
 
 def build_router(ctx):
     router = APIRouter()
@@ -14,11 +12,13 @@ def build_router(ctx):
 
     @router.get("/snapshot")
     async def snapshot():
+        ctx.state.perception_runtime = ctx.perception_service.health()
+        ctx.state.motion_runtime = ctx.actuator_service.health()
         return ctx.state.to_snapshot(ctx.metrics.to_dict()).model_dump(mode="json")
 
     @router.post("/commands", response_model=CommandAck)
     async def post_command(command: Command):
-        preview = evaluate_command(ctx.state.actuators, command.type, command.target, command.payload)
+        preview = ctx.actuator_service.evaluate(command.type, command.target, command.payload)
         if not preview.accepted:
             ctx.metrics.commands_rejected += 1
             ack = CommandAck(

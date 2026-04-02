@@ -35,4 +35,5 @@ async def shutdown() -> None:
         task.cancel()
     await asyncio.gather(*app.state.tasks, return_exceptions=True)
     await ctx.persistence.stop()
+    ctx.perception_service.close()
     ctx.logger.info_json("edge_stopped")

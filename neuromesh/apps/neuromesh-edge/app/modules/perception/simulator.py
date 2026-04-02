@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import random
+from app.modules.perception.providers.simulated import SimulatedPerceptionProvider
+
+_provider = SimulatedPerceptionProvider()
 
 
 def next_motion_state(current_moving: bool) -> tuple[bool, float, float]:
-    interval_jitter = random.uniform(-0.2, 0.3)
-    moving = current_moving
-    if random.random() < 0.35:
-        moving = not moving
-    confidence = round(random.uniform(0.5, 0.99) if moving else random.uniform(0.01, 0.4), 2)
-    return moving, confidence, interval_jitter
+    moving, confidence, jitter, _meta = _provider.next_event(current_moving)
+    return moving, confidence, jitter

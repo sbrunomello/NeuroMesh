@@ -14,3 +14,5 @@ class Snapshot(BaseModel):
     actuators: dict[str, Any] = Field(default_factory=dict)
     current_behavior: str = Field(min_length=1)
     metrics: dict[str, Any] = Field(default_factory=dict)
+    perception: dict[str, Any] = Field(default_factory=dict)
+    motion: dict[str, Any] = Field(default_factory=dict)
