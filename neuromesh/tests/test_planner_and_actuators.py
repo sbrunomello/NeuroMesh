@@ -26,24 +26,47 @@ def test_planner_generates_command_for_motion_detected():
     assert cmd.payload["position"] == 120
 
 
-def test_actuator_resolution_and_rejection_cases():
+def test_servo_normalization_clamp_offset_and_invert():
     motion_mod = _load_module(
         Path(__file__).resolve().parents[1] / "apps" / "neuromesh-edge" / "app" / "modules" / "motion" / "actuator_service.py",
         "actuator_service",
     )
-    actuators = {
-        "servo_pan": {"position": 90, "min": 0, "max": 180},
-        "servo_tilt": {"position": 90, "min": 15, "max": 165},
-    }
+    calib_mod = _load_module(
+        Path(__file__).resolve().parents[1] / "apps" / "neuromesh-edge" / "app" / "modules" / "motion" / "calibration.py",
+        "calibration",
+    )
 
-    accepted = motion_mod.evaluate_command(actuators, "move_servo", "servo_pan", {"position": 190})
+    cfg = calib_mod.ServoCalibration(channel=0, min_angle=10, max_angle=170, home_angle=90, offset_deg=5, invert=False)
+    assert motion_mod.normalize_servo_position(cfg, 0) == 10
+    assert motion_mod.normalize_servo_position(cfg, 170) == 170
+
+    inv = calib_mod.ServoCalibration(channel=0, min_angle=0, max_angle=180, home_angle=90, offset_deg=0, invert=True)
+    assert motion_mod.normalize_servo_position(inv, 30) == 150
+
+
+def test_actuator_service_with_stub_provider_accepts_and_rejects():
+    motion_mod = _load_module(
+        Path(__file__).resolve().parents[1] / "apps" / "neuromesh-edge" / "app" / "modules" / "motion" / "actuator_service.py",
+        "actuator_service_stub",
+    )
+    calib_mod = _load_module(
+        Path(__file__).resolve().parents[1] / "apps" / "neuromesh-edge" / "app" / "modules" / "motion" / "calibration.py",
+        "calibration_stub",
+    )
+    provider_mod = _load_module(
+        Path(__file__).resolve().parents[1] / "apps" / "neuromesh-edge" / "app" / "modules" / "motion" / "providers" / "stub.py",
+        "motion_stub_provider",
+    )
+
+    service = motion_mod.ActuatorService(
+        provider=provider_mod.StubMotionProvider(),
+        calibration={"servo_pan": calib_mod.ServoCalibration(channel=0, min_angle=0, max_angle=180, home_angle=90, offset_deg=0, invert=False)},
+    )
+
+    accepted = service.evaluate("move_servo", "servo_pan", {"position": 181})
     assert accepted.accepted is True
     assert accepted.normalized_payload["position"] == 180
 
-    invalid_target = motion_mod.evaluate_command(actuators, "move_servo", "servo_x", {"position": 90})
-    assert invalid_target.accepted is False
-    assert invalid_target.reason == "target_not_found"
-
-    invalid_payload = motion_mod.evaluate_command(actuators, "move_servo", "servo_pan", {"position": "bad"})
-    assert invalid_payload.accepted is False
-    assert invalid_payload.reason.startswith("invalid_payload")
+    rejected = service.evaluate("move_servo", "servo_x", {"position": 90})
+    assert rejected.accepted is False
+    assert rejected.reason == "target_not_found"

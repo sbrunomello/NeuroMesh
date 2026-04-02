@@ -7,19 +7,36 @@ NeuroMesh mantém arquitetura **edge-first + distribuída + event-driven**:
 - **Core:** consumo de eventos e decisão por regras simples.
 - **Comunicação:** HTTP (`/commands`, `/snapshot`) + WebSocket (`/events`).
 
-## Hardening aplicado
+## PR2: integração de hardware real sem quebrar foundation
 
-1. **Config operacional por env** (sem hardcode para runtime distribuído).
-2. **Atuadores generalizados** (sem acoplamento a `servo_1`; usa `command.target`).
-3. **Domínio interno explícito** em `modules/*` (edge) e `bridge/*` (core).
-4. **Persistência mínima** (`events.jsonl`, `snapshot.json`) com tolerância a falhas.
-5. **Contracts endurecidos** (`schema_version`, validações, `CommandAck`).
-6. **Métricas runtime úteis** (`events_published`, `events_persisted`, `commands_rejected`, etc.).
-7. **Testes de integração essenciais** cobrindo fluxo edge/core.
+### Percepção
+- `PerceptionService` seleciona provider por configuração.
+- Providers atuais:
+  - `simulated`
+  - `opencv_motion` (USB camera + background subtraction)
+- Falhas de câmera não matam runtime: com `NEUROMESH_CAMERA_SIMULATION_FALLBACK=true`, edge cai para simulação.
 
-## Limitações atuais da foundation
+### Motion/atuação
+- `ActuatorService` centraliza validação/normalização:
+  - valida contrato (`position` int)
+  - aplica `offset_deg`
+  - aplica `invert`
+  - aplica `clamp` em `[min_angle, max_angle]`
+- Provider motion configurável:
+  - `stub`
+  - `pca9685` (via adapter dedicado)
+- Hardware isolado por `ServoHardwareAdapter` (NoOp + PCA9685).
 
-- Sem hardware real de atuadores/sensores.
-- Sem percepção real de câmera.
-- Sem malha multi-node completa.
-- Sem LLM (deliberado no v1).
+### Calibração
+- Calibração externa via `NEUROMESH_ACTUATORS_CONFIG`.
+- Se servo real habilitado e arquivo inválido/faltante: fail-fast no startup.
+- Em stub: defaults seguros são carregados.
+
+### Observabilidade
+- Snapshot inclui seção `perception` e `motion` com provider ativo, status de câmera/hardware, frames processados e calibração carregada.
+- Logs JSON explícitos para seleção de provider, erro de captura e execução de comando.
+
+## Limitações atuais
+- Detecção de visão é motion-only (sem face tracking neste PR).
+- Adapter PCA9685 é baseline para Orange Pi; pode exigir ajustes de timing conforme setup elétrico.
+- Sem mesh multi-node completa e sem LLM (deliberado no v1).

@@ -1,0 +1,18 @@
+{
+  "servo_pan": {
+    "channel": 0,
+    "min_angle": 0,
+    "max_angle": 180,
+    "home_angle": 90,
+    "offset_deg": 0,
+    "invert": false
+  },
+  "servo_tilt": {
+    "channel": 1,
+    "min_angle": 15,
+    "max_angle": 165,
+    "home_angle": 90,
+    "offset_deg": 0,
+    "invert": false
+  }
+}
