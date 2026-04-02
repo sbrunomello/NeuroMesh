@@ -1,0 +1,3 @@
+from packages.contracts.events import Event
+
+__all__ = ["Event"]
